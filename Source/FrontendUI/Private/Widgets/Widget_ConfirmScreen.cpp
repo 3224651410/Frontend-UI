@@ -1,0 +1,115 @@
+
+
+
+#include "Widgets/Widget_ConfirmScreen.h"
+#include "CommonTextBlock.h"
+#include "Components/DynamicEntryBox.h"
+#include "Widgets/Components/FrontendCommonButtonBase.h"
+#include "ICommonInputModule.h"
+
+
+//**确认屏幕信息对象  
+UConfirmScreenInfoObject* UConfirmScreenInfoObject::CreateOKScreen(const FText& InScreenTitle, const FText& InScreenMsg)
+{
+	UConfirmScreenInfoObject* InfoObject = NewObject<UConfirmScreenInfoObject>();
+	InfoObject->ScreenTitle = InScreenTitle;
+	InfoObject->ScreenMessage = InScreenMsg;
+
+	FConfirmScreenButtonInfo OKButtonInfo;
+	OKButtonInfo.ConfirmScreenButtonType = EConfirmScreenButtonType::Closed;
+	OKButtonInfo.ButtonTextToDisplay = FText::FromString(TEXT("OK"));
+
+	InfoObject->AvailableScreenButtons.Add(OKButtonInfo);
+
+	return InfoObject;
+}
+
+UConfirmScreenInfoObject* UConfirmScreenInfoObject::CreateYesNoScreen(const FText& InScreenTitle, const FText& InScreenMsg)
+{
+	UConfirmScreenInfoObject* InfoObject = NewObject<UConfirmScreenInfoObject>();
+	InfoObject->ScreenTitle = InScreenTitle;
+	InfoObject->ScreenMessage = InScreenMsg;
+
+	FConfirmScreenButtonInfo YesButtonInfo;
+	YesButtonInfo.ConfirmScreenButtonType = EConfirmScreenButtonType::Confirmed;
+	YesButtonInfo.ButtonTextToDisplay = FText::FromString(TEXT("Yes"));
+
+	FConfirmScreenButtonInfo NoButtonInfo;
+	NoButtonInfo.ConfirmScreenButtonType = EConfirmScreenButtonType::Cancelled;
+	NoButtonInfo.ButtonTextToDisplay = FText::FromString(TEXT("No"));
+
+	InfoObject->AvailableScreenButtons.Add(YesButtonInfo);
+	InfoObject->AvailableScreenButtons.Add(NoButtonInfo);
+
+	return InfoObject;
+}
+
+UConfirmScreenInfoObject* UConfirmScreenInfoObject::CreateOkCancelScreen(const FText& InScreenTitle, const FText& InScreenMsg)
+{
+	UConfirmScreenInfoObject* InfoObject = NewObject<UConfirmScreenInfoObject>();
+	InfoObject->ScreenTitle = InScreenTitle;
+	InfoObject->ScreenMessage = InScreenMsg;
+	 
+	FConfirmScreenButtonInfo OkButtonInfo;
+	OkButtonInfo.ConfirmScreenButtonType = EConfirmScreenButtonType::Confirmed;
+	OkButtonInfo.ButtonTextToDisplay = FText::FromString(TEXT("Ok"));
+
+	FConfirmScreenButtonInfo CancelButtonInfo;
+	CancelButtonInfo.ConfirmScreenButtonType = EConfirmScreenButtonType::Cancelled;
+	CancelButtonInfo.ButtonTextToDisplay = FText::FromString(TEXT("Cancel"));
+
+	InfoObject->AvailableScreenButtons.Add(OkButtonInfo);
+	InfoObject->AvailableScreenButtons.Add(CancelButtonInfo);
+
+	return InfoObject;
+}
+
+void UWidget_ConfirmScreen::InitConfirmScreen(UConfirmScreenInfoObject* InScreenInfoObject, TFunction<void(EConfirmScreenButtonType)> ClickedButtonCallback)
+{
+	check(InScreenInfoObject && CommonTextBlock_Message && CommonTextBlock_Title && DynamicEntryBox_Buttons);
+
+	CommonTextBlock_Title->SetText(InScreenInfoObject->ScreenTitle);
+	CommonTextBlock_Message->SetText(InScreenInfoObject->ScreenMessage);
+
+	//检查输入框是否包含有旧按钮
+	if (DynamicEntryBox_Buttons->GetNumEntries() != 0)
+	{
+		/*
+		* 清空输入框里原有的按钮
+		* 输入框的控件类型由子蓝图控件决定
+		*/
+		DynamicEntryBox_Buttons->Reset<UFrontendCommonButtonBase>(
+			[](UFrontendCommonButtonBase& ExistingButton)
+			{
+				ExistingButton.OnClicked().Clear();
+			}
+		);
+	}
+
+	check(!InScreenInfoObject->AvailableScreenButtons.IsEmpty());
+
+	for (const FConfirmScreenButtonInfo& AvailableButtonInfo : InScreenInfoObject->AvailableScreenButtons)
+	{
+		UFrontendCommonButtonBase* AddedButton = DynamicEntryBox_Buttons->CreateEntry<UFrontendCommonButtonBase>();
+		AddedButton->SetButtonText(AvailableButtonInfo.ButtonTextToDisplay);
+		AddedButton->OnClicked().AddLambda(
+			[ClickedButtonCallback, AvailableButtonInfo, this]()
+			{
+				ClickedButtonCallback(AvailableButtonInfo.ConfirmScreenButtonType);
+
+				DeactivateWidget();
+			}
+		);
+	}
+}
+
+UWidget* UWidget_ConfirmScreen::NativeGetDesiredFocusTarget() const
+{
+	if (DynamicEntryBox_Buttons->GetNumEntries() != 0)
+	{
+		//设置焦点在最后一个按钮。
+		// 如果有两个按钮，YES和NO，手柄会聚焦在NO按钮上
+		DynamicEntryBox_Buttons->GetAllEntries().Last()->SetFocus();
+	}
+	return Super::NativeGetDesiredFocusTarget();
+}
